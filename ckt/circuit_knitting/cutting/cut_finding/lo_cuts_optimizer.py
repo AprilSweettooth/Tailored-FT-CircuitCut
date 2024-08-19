@@ -139,7 +139,7 @@ class LOCutsOptimizer:
         out_1 = []
 
         while True:
-            state, cost = self.cut_optimization.optimization_pass()
+            state, cost, Q, t, T = self.cut_optimization.optimization_pass()
             if state is None:
                 break
             out_1.append((cost, state))
@@ -152,7 +152,7 @@ class LOCutsOptimizer:
         else:  # pragma: no cover
             self.best_result = None
 
-        return self.best_result
+        return self.best_result, Q, t, T
 
     def get_results(self) -> DisjointSubcircuitsState | None:
         """Return the optimization results."""

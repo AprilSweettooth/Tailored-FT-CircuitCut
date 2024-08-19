@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import random
 import heapq
 import numpy as np
 from typing import TYPE_CHECKING, Callable, cast, NamedTuple
@@ -104,7 +105,8 @@ class BestFirstPriorityQueue:
         """
         if self.qsize() == 0:  # pragma: no cover
             return None, None, None
-
+        # if len(self.pqueue) > 1:
+        #     heapq.heappop(self.pqueue)
         best: tuple = heapq.heappop(self.pqueue)
         # print(best)
         return best[-1], (-best[1]), best[0]
@@ -250,6 +252,14 @@ class BestFirstSearch:
         self.num_backjumps = 0
         self.penultimate_stats = self.get_stats()
         self.put(initial_state_list, 0, args)
+        # for j in initial_state_list:
+        #     opt_out = cast(DisjointSubcircuitsState, j)
+        #     print(opt_out.print())
+        #     opt_out.actions = cast(list, opt_out.actions)
+            
+        #     for i in opt_out.actions:
+        #         print('here')
+        #         print(i)
         # print(initial_state_list)
     def optimization_pass(
         self,
@@ -279,7 +289,7 @@ class BestFirstSearch:
             self.mincost_bound = self.mincost_bound_func(*args)  # type: ignore
 
         prev_depth = None
-        resource_search = 0
+        # resource_search = 0
         
         while (
             self.pqueue.qsize() > 0
@@ -288,7 +298,9 @@ class BestFirstSearch:
         ):
             # print(self.pqueue)
             state, depth, cost = self.pqueue.get()
-            # print('loop')
+            # if len(cast(DisjointSubcircuitsState, state).actions) > 0:
+            #     opt_out = cast(DisjointSubcircuitsState, state)
+            #     print(opt_out.print())
             self.update_minimum_reached(cost)
             if cost is None or self.cost_bounds_exceeded(cost):
                 return None, None
@@ -301,26 +313,36 @@ class BestFirstSearch:
             prev_depth = depth
             self.goal_state_func = cast(Callable, self.goal_state_func)
             if self.goal_state_func(state, *args):
-                print(self.goal_state_func)
-                print('\n', resource_cost(circuit, state, backend_est, True, False))
-                if resource_search == 0:
-                    self.penultimate_stats = self.get_stats()
-                    self.update_upperbound_goal_state(state, *args)
-                    self.update_minimum_reached(cost)
-                    return state, cost
+                # print(self.goal_state_func)
+                # print('\n', resource_cost(circuit, state, backend_est, True, False))
+                # if resource_search == 0:
+                self.penultimate_stats = self.get_stats()
+                self.update_upperbound_goal_state(state, *args)
+                self.update_minimum_reached(cost)
+                if backend_est is not None:
+                    res, so = resource_cost(circuit, state, backend_est, True, False)
+                    overall_Q = res[0]['physicalQubits']
+                    overall_T = res[0]['number_of_T_state']
+                    overall_t = res[0]['runtime']
+                    sub_Q = max([res[i]['physicalQubits'] for i in range(1,len(res))])
+                    sub_T = max([res[i]['number_of_T_state'] for i in range(1,len(res))])
+                    sub_t = sum([res[i]['runtime'] for i in range(1,len(res))])
                 else:
-                    resource_search += 1
+                    return state, cost, None, None, None
+                return state, cost, sub_Q-overall_Q, sub_t-overall_t, sub_T-overall_T
+                # else:
+                #     resource_search += 1
 
             self.next_state_func = cast(Callable, self.next_state_func)
             next_state_list = self.next_state_func(state, *args)
-            print(next_state_list)
+            # print(next_state_list)
             self.put(next_state_list, depth + 1, args)
 
         # If all states have been explored, then the minimum has been reached
         if self.pqueue.qsize() == 0:
             self.min_reached = True
-
-        return None, None
+        # print(self.min_reached)
+        return None, None, None, None, None
 
     def minimum_reached(self) -> bool:
         """Return True if the optimization reached a global minimum."""
@@ -387,7 +409,22 @@ class BestFirstSearch:
 
             if self.upperbound_cost is None or cost <= self.upperbound_cost:
                 self.pqueue.put(state, depth, cost)
+                # print(self.pqueue)
                 self.num_enqueues += 1
+
+        # temp = []
+        # for state in state_list:
+        #     assert self.cost_func is not None
+        #     cost = self.cost_func(state, *args)
+
+        #     if self.upperbound_cost is None or cost <= self.upperbound_cost:
+        #         temp.append([state, depth, cost])
+        # print(temp)
+        # next_state = random.choice(temp)
+        # self.pqueue.put(next_state[0], next_state[1], next_state[2])
+        #         # print(self.pqueue)
+        # self.num_enqueues += 1
+                
 
     def update_minimum_reached(
         self, min_cost: None | float | tuple[float, float]

@@ -161,6 +161,7 @@ def greedy_cut_optimization(
     start_state = DisjointSubcircuitsState(
         circuit_interface.get_num_qubits(), max_wire_cuts_circuit(circuit_interface)
     )
+    # print(start_state)
     return greedy_best_first_search(start_state, search_space_funcs, func_args)
 
 
@@ -272,7 +273,6 @@ class CutOptimization:
             stop_at_first_min=True,
         )
         sq.initialize([start_state], self.func_args)
-
         # Use the upper bound from the initial greedy search to constrain the
         # subsequent search.
         if self.greedy_goal_state is not None:
@@ -288,7 +288,7 @@ class CutOptimization:
         without exceeding the minimum upper bound across all cutting
         decisions previously returned.
         """
-        state, cost = self.search_engine.optimization_pass(self.original_circ, self.backend, self.func_args)
+        state, cost, Q, t, T = self.search_engine.optimization_pass(self.original_circ, self.backend, self.func_args)
         # print(state)
         if state is None and not self.goal_state_returned:
             state = self.greedy_goal_state
@@ -296,7 +296,7 @@ class CutOptimization:
 
         self.goal_state_returned = True
         # print(state)
-        return state, cost
+        return state, cost, Q, t, T
 
     def minimum_reached(self) -> bool:
         """Return True if the optimization reached a global minimum.

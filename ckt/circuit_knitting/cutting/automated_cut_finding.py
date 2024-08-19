@@ -25,6 +25,7 @@ from .cut_finding.disjoint_subcircuits_state import DisjointSubcircuitsState
 from .cut_finding.circuit_interface import SimpleGateList
 from .cut_finding.lo_cuts_optimizer import LOCutsOptimizer
 from .cut_finding.cco_utils import qc_to_cco_circuit
+from .automation_resource import *
 
 def test(
     circuit: QuantumCircuit,
@@ -54,6 +55,7 @@ def test(
 
 def find_cuts(
     circuit: QuantumCircuit,
+    backend,
     optimization: OptimizationParameters,
     constraints: DeviceConstraints,
 ) -> tuple[QuantumCircuit, dict[str, float]]:
@@ -87,7 +89,7 @@ def find_cuts(
     """
     circuit_cco = qc_to_cco_circuit(circuit)
     interface = SimpleGateList(circuit_cco)
-
+    # print(interface)
     opt_settings = OptimizationSettings(
         seed=optimization.seed,
         max_gamma=optimization.max_gamma,
@@ -97,11 +99,22 @@ def find_cuts(
     )
 
     # Hard-code the optimizer to an LO-only optimizer
-    optimizer = LOCutsOptimizer(interface, opt_settings, constraints)
+    optimizer = LOCutsOptimizer(interface, opt_settings, constraints, circuit, backend)
 
     # Find cut locations
-    opt_out = optimizer.optimize()
-
+    opt_out, Q, t, T = optimizer.optimize()
+    if backend is not None:
+        if Q is None:
+            res, so = resource_cost(circuit, opt_out, backend, True, False)
+            overall_Q = res[0]['physicalQubits']
+            overall_T = res[0]['number_of_T_state']
+            overall_t = res[0]['runtime']
+            sub_Q = max([res[i]['physicalQubits'] for i in range(1,len(res))])
+            sub_T = max([res[i]['number_of_T_state'] for i in range(1,len(res))])
+            sub_t = sum([res[i]['runtime'] for i in range(1,len(res))])
+            Q, t, T = sub_Q-overall_Q, sub_t-overall_t, sub_T-overall_T
+    else:
+        Q, t, T = None, None, None
     wire_cut_actions = []
     gate_ids = []
 
@@ -159,6 +172,9 @@ def find_cuts(
             metadata["cuts"].append(("Wire Cut", i))
     metadata["sampling_overhead"] = opt_out.upper_bound_gamma() ** 2
     metadata["minimum_reached"] = optimizer.minimum_reached()
+    metadata["change_in_Q"] = Q
+    metadata["change_in_t"] = t
+    metadata["change_in_T"] = T
 
     return circ_out, metadata
 
