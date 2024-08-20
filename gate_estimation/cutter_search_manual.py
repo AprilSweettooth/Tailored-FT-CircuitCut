@@ -4,7 +4,7 @@ from qiskit.converters import circuit_to_dag, dag_to_circuit
 import math
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit import Qubit, Instruction
-from resource_analysis import PhysicalParameters
+# from resource_analysis import PhysicalParameters
 
 
 def read_circ(circuit):
