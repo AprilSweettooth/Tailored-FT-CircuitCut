@@ -168,17 +168,24 @@ def disconnect_cnot(circuit):
         count += 1
     return circuit
 
-def op_split(s):
+def op_split(s, h=False):
     head = s.rstrip('0123456789')
     tail = s[len(head):]
-    return tail
+    if not h:
+        return tail
+    else:
+        return head
 
 def find_cnot(data, cnot_idx, idx):
+    # print('in')
     if 'cx_c'+str(cnot_idx) in data[idx].operation.name and any('cx_t'+str(cnot_idx) in d.operation.name for d in data):
+        # print('right')
         for i, d in enumerate(data):
             if 'cx_t'+str(cnot_idx)==d.operation.name:
                 return True, i
+        return False, 0
     else:
+        # print('wrong')
         return False, 0
 
 def cut_parser(node_name_ids, id_node_names, N, cuts=None, barrier=False):
@@ -194,7 +201,9 @@ def cut_parser(node_name_ids, id_node_names, N, cuts=None, barrier=False):
             count += 1
     # for i in subcircuit.data:
     #     print(i)
+    # print(subcircuit.data)
     for idx, ins in enumerate(subcircuit.data):
+        # print(op_split(ins.operation.name), idx)
         found, pos = find_cnot(subcircuit.data, op_split(ins.operation.name), idx)
         if found:
             # print('cnot',ins)
@@ -249,6 +258,27 @@ def plot_partition(G_cut, label_dict):
 
     plt.show()
 
+def graph_to_circ(subcirc, circuit):
+    for idx, _instruction in reversed(list(enumerate(subcirc.data))):
+        if 'cx' in _instruction.operation.name:
+            del subcirc.data[idx]
+    for idx, ins in enumerate(subcirc.data):
+        if 'cnot' in ins.operation.name:
+            count = op_split(ins.operation.name)
+            del subcirc.data[idx] 
+            old_ins = circuit.data[int(count)]
+            assert old_ins.operation.name == 'cx'
+            subcirc.data.insert(idx,(old_ins.operation,[ins.qubits[0], ins.qubits[1]],[]))
+        else:
+            count = op_split(ins.operation.name)
+            del subcirc.data[idx] 
+            old_ins = circuit.data[int(count)]
+            if old_ins.operation.name != op_split(ins.operation.name, True):
+                print(old_ins.operation.name, op_split(ins.operation.name, True))
+                raise Exception('Gate not match !')
+            subcirc.data.insert(idx,(old_ins.operation,[ins.qubits[0]],[]))  
+    return subcirc
+
 def find_cuts(circuit, max_cut, plot=False):
     n_vertices, gate_edges, wire_edges, node_name_ids, id_node_names = read_circ(disconnect_cnot(circuit.copy()))
     G = nx.Graph() 
@@ -277,6 +307,7 @@ def find_cuts(circuit, max_cut, plot=False):
     s = []
     for i in range(len(G_cut)):
         n.append(list(G_cut[i].nodes()))
+        # print(n)
         s.append(cut_parser(node_name_ids, id_node_names, sorted(n[-1])))
 
     gate_cuts = 0
@@ -292,4 +323,6 @@ def find_cuts(circuit, max_cut, plot=False):
 
     assert gate_cuts+wire_cuts == len(edge_cut_list) and gate_cuts+wire_cuts < max_cut
 
-    return single_circs+s, gate_cuts, wire_cuts
+    subcircuits = [graph_to_circ(sub, circuit) for sub in single_circs+s]
+
+    return subcircuits, gate_cuts, wire_cuts
