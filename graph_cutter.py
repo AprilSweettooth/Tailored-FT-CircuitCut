@@ -92,13 +92,16 @@ def append_edge(partition, e1, e2):
         if e1 in partition[i] and e2 in partition[i]:
             return i
 
-def cutter(G, max_cut, p=5/12):
+def cutter(G, max_cut, p=5/12, seed=None):
     cut = True
     while cut:
         valid = False
         edge_cut_list = [] # Computed by listing edges between the 2 partitions
         while not valid:
-            cut_size, partition = nx.approximation.randomized_partitioning(G, p=p)
+            if seed is not None:
+                cut_size, partition = nx.approximation.randomized_partitioning(G, p=p, seed=seed)
+            else:
+                cut_size, partition = nx.approximation.randomized_partitioning(G, p=p)
             subpartition = [p for p in partition]
             if all(len(p) > 0 for p in subpartition):
                 # print(subpartition)
@@ -279,13 +282,13 @@ def graph_to_circ(subcirc, circuit):
             subcirc.data.insert(idx,(old_ins.operation,[ins.qubits[0]],[]))  
     return subcirc
 
-def find_cuts(circuit, max_cut, plot=False):
+def find_cuts(circuit, max_cut, seed=None, plot=False):
     n_vertices, gate_edges, wire_edges, node_name_ids, id_node_names = read_circ(disconnect_cnot(circuit.copy()))
     G = nx.Graph() 
     all_edges = gate_edges+wire_edges
     G.add_edges_from(all_edges)
 
-    edge_cut_list, G_cut, partition, single_op = cutter(G, max_cut)
+    edge_cut_list, G_cut, partition, single_op = cutter(G, max_cut, p=5/12, seed=seed)
 
     if plot:
         label_dict = {}
@@ -326,3 +329,13 @@ def find_cuts(circuit, max_cut, plot=False):
     subcircuits = [graph_to_circ(sub, circuit) for sub in single_circs+s]
 
     return subcircuits, gate_cuts, wire_cuts
+
+def check_estimation_validity(circ):
+    valid = False
+    while not valid:
+        for i, sub in enumerate(reversed(circ)):
+            if len(sub.data) == 0 or all([s.operation.name not in {'rx', 'ry', 'rz'} for s in sub.data]):
+                circ.pop(len(circ)-1-i)
+        if all(len(s.data) > 0 for s in circ) and not all([s.operation.name not in {'rx', 'ry', 'rz'} for s in sub.data]):
+            valid = True
+    return circ

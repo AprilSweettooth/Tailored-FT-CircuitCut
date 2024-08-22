@@ -30,3 +30,39 @@ def plot_trotter_info(circuit):
 
     """
     )
+
+def accel_asc(n):
+    # https://stackoverflow.com/questions/10035752/elegant-python-code-for-integer-partitioning
+    return set(accel_asc_yield(n))
+
+
+def accel_asc_yield(n):
+    a = [0 for i in range(n + 1)]
+    k = 1
+    y = n - 1
+    while k != 0:
+        x = a[k - 1] + 1
+        k -= 1
+        while 2 * x <= y:
+            a[k] = x
+            y -= x
+            k += 1
+        l = k + 1
+        while x <= y:
+            a[k] = x
+            a[l] = y
+            yield tuple(a[: k + 2])
+            x += 1
+            y -= 1
+        a[k] = x + y
+        y = x + y - 1
+        yield tuple(a[: k + 1])
+
+def error_budget_partition(overall_budget, num_subcirc):
+    n = int(overall_budget * 1000)
+    partition = list(accel_asc(n))
+    sub_part = []
+    for p in partition:
+        if len(p) == num_subcirc:
+            sub_part.append(list(p))
+    return sub_part
