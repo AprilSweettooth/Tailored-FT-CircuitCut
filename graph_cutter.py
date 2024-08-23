@@ -283,50 +283,55 @@ def graph_to_circ(subcirc, circuit):
     return subcirc
 
 def find_cuts(circuit, max_cut, seed=None, plot=False):
-    n_vertices, gate_edges, wire_edges, node_name_ids, id_node_names = read_circ(disconnect_cnot(circuit.copy()))
-    G = nx.Graph() 
-    all_edges = gate_edges+wire_edges
-    G.add_edges_from(all_edges)
+    valid = False
+    while not valid:
+        n_vertices, gate_edges, wire_edges, node_name_ids, id_node_names = read_circ(disconnect_cnot(circuit.copy()))
+        G = nx.Graph() 
+        all_edges = gate_edges+wire_edges
+        G.add_edges_from(all_edges)
 
-    edge_cut_list, G_cut, partition, single_op = cutter(G, max_cut, p=5/12, seed=seed)
+        edge_cut_list, G_cut, partition, single_op = cutter(G, max_cut, p=5/12, seed=seed)
 
-    if plot:
-        label_dict = {}
-        for i in list(node_name_ids.values()):
-            label_dict[i[0]] = i[1]
-        plot_partition(G_cut, label_dict)
+        if plot:
+            label_dict = {}
+            for i in list(node_name_ids.values()):
+                label_dict[i[0]] = i[1]
+            plot_partition(G_cut, label_dict)
 
-    if single_op is not None:
-        single_circs = []
-    for op_s in list(single_op):
-        subcircuit = QuantumCircuit(1)
-        op = node_name_ids[id_node_names[op_s]]
-        sq = QuantumCircuit(1, name=op[1])
-        sq_ins = sq.to_instruction()
-        subcircuit.data.insert(0,(sq_ins,[Qubit(QuantumRegister(subcircuit.num_qubits, 'q'),0)],[])) 
-        single_circs.append(subcircuit)
+        if single_op is not None:
+            single_circs = []
+        for op_s in list(single_op):
+            subcircuit = QuantumCircuit(1)
+            op = node_name_ids[id_node_names[op_s]]
+            sq = QuantumCircuit(1, name=op[1])
+            sq_ins = sq.to_instruction()
+            subcircuit.data.insert(0,(sq_ins,[Qubit(QuantumRegister(subcircuit.num_qubits, 'q'),0)],[])) 
+            single_circs.append(subcircuit)
 
-    n = []
-    s = []
-    for i in range(len(G_cut)):
-        n.append(list(G_cut[i].nodes()))
-        # print(n)
-        s.append(cut_parser(node_name_ids, id_node_names, sorted(n[-1])))
+        n = []
+        s = []
+        for i in range(len(G_cut)):
+            n.append(list(G_cut[i].nodes()))
+            # print(n)
+            s.append(cut_parser(node_name_ids, id_node_names, sorted(n[-1])))
 
-    gate_cuts = 0
-    wire_cuts = 0
-    for e in edge_cut_list:
-        u,v = e
-        if (u,v) in gate_edges or (v,u) in gate_edges:
-            gate_cuts += 1
-        elif (u,v) in wire_edges or (v,u) in wire_edges:
-            wire_cuts += 1
-        else:
-            raise Exception('Cuts are interpreted wrongly !')
+        gate_cuts = 0
+        wire_cuts = 0
+        for e in edge_cut_list:
+            u,v = e
+            if (u,v) in gate_edges or (v,u) in gate_edges:
+                gate_cuts += 1
+            elif (u,v) in wire_edges or (v,u) in wire_edges:
+                wire_cuts += 1
+            else:
+                raise Exception('Cuts are interpreted wrongly !')
 
-    assert gate_cuts+wire_cuts == len(edge_cut_list) and gate_cuts+wire_cuts < max_cut
+        assert gate_cuts+wire_cuts == len(edge_cut_list) and gate_cuts+wire_cuts < max_cut
 
-    subcircuits = [graph_to_circ(sub, circuit) for sub in single_circs+s]
+        subcircuits = [graph_to_circ(sub, circuit) for sub in single_circs+s]
+        
+        if all(s.num_qubits < circuit.num_qubits for s in subcircuits):
+            valid = True
 
     return subcircuits, gate_cuts, wire_cuts
 
