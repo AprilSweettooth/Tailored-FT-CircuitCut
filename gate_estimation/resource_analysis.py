@@ -71,8 +71,8 @@ class PhysicalParameters:
 
     """
     Q: int = 1
-    logical_time_step: float = 1.0
-    number_of_T_gates: int = 1
+    # logical_time_step: float = 1.0
+    # number_of_T_gates: int = 1
 
     def code_distance_from_budget(physical_error: float, budget: float) -> int:
         """Get the code distance that keeps one below the logical error `budget`."""
@@ -150,14 +150,22 @@ class PhysicalParameters:
         P_t = error_budget[1]/M
         d_dist = cls.code_distance_from_budget(phys_err_rate, P_t)
         distillation_round = 1
-        distillation_unit_per_round = 2
+        distillation_unit_per_round = 1
         tau_dist = distillation_round * cycle_time_ns * 1e-9 * d_dist * 13
         M_D = 1
-        num_factories = np.ceil(M*tau_dist/(M_D*t))
+        # num_factories = np.ceil(M*tau_dist/(M_D*t))
+        # if not t > tau_dist:
+        #     raise ValueError(f"runtime ratio must be larger.")
+        # # assume each round n is same
+        # distillation_qubits = num_factories * distillation_unit_per_round * 20 * cls.physical_qubits(d_dist)
+        # return PhysicalParameters(
+        #     Q=alg_qubits*cls.physical_qubits(code_distance)+distillation_qubits, logical_time_step=t, number_of_T_gates=M
+        # )
+        num_factories = 1
         if not t > tau_dist:
             raise ValueError(f"runtime ratio must be larger.")
         # assume each round n is same
         distillation_qubits = num_factories * distillation_unit_per_round * 20 * cls.physical_qubits(d_dist)
         return PhysicalParameters(
-            Q=alg_qubits*cls.physical_qubits(code_distance)+distillation_qubits, logical_time_step=t, number_of_T_gates=M
+            Q=alg_qubits*cls.physical_qubits(code_distance)+distillation_qubits
         )
