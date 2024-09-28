@@ -5,17 +5,22 @@ from qiskit.circuit.library import PauliEvolutionGate
 from qiskit.quantum_info import SparsePauliOp
 from qiskit.quantum_info import SparsePauliOp
 from qiskit.transpiler import CouplingMap
-from qiskit.synthesis import SuzukiTrotter
+from qiskit.synthesis import SuzukiTrotter, QDrift
 from qiskit.circuit import QuantumCircuit
 from qiskit.circuit.library import PauliEvolutionGate
 from qiskit import transpile
 from qiskit_nature.second_q.hamiltonians import IsingModel
 from qiskit_nature.second_q.hamiltonians.lattices import *
 from qiskit.quantum_info import SparsePauliOp
+import qiskit.circuit.library as library
 
 from openfermion.ops import QubitOperator
 
 import numpy as np
+import math, random
+
+from uccsd_ansatz import *
+from ripple_carry_adder import *
 
 def qubitop_to_pauliop(qubit_operator):
     """Convert an openfermion QubitOperator to a qiskit WeightedPauliOperator.
@@ -135,7 +140,7 @@ def to_sparse_op(lattice):
 
         return SparsePauliOp(ham, coeffs)
 
-def build_Ising_hamiltonian(num_spins, t=0.1, h=-1, Dimension=1):
+def build_Ising_hamiltonian(num_spins, t=0.1, h=-1, Dimension=1, method='trotter'):
     
     if Dimension==1:
         lattice_map = CouplingMap.from_line(num_spins, bidirectional=False)
@@ -177,24 +182,39 @@ def build_Ising_hamiltonian(num_spins, t=0.1, h=-1, Dimension=1):
         x_counter = len([x for x in list(ham) if 'X' in x])
 
     # second_order_formula = SuzukiTrotter()
-    fourth_order_formula = SuzukiTrotter(order=4)
-    order = 4
     epsilon = 0.0025
-    # num_timesteps = 80
-    # print((t**(1+1/order) * (z_counter+h*x_counter)**(1+1/order)) / (epsilon)**(1/order))
-    num_timesteps = int(np.ceil( (t**(1+1/order) * (z_counter+h*x_counter)**(1+1/order)) / (epsilon)**(1/order)))
-    epsilon = (t**(1+1/order) * (z_counter+h*x_counter)**(1+1/order) / num_timesteps)**order
-    # print('error: ', np.real(epsilon))
-    print('number of time steps: ', num_timesteps)
+    if method=='trotter':
+        fourth_order_formula = SuzukiTrotter(order=4)
+        order = 4
+        # num_timesteps = 80
+        # print((t**(1+1/order) * (z_counter+h*x_counter)**(1+1/order)) / (epsilon)**(1/order))
+        num_timesteps = int(np.ceil( (t**(1+1/order) * (z_counter+h*x_counter)**(1+1/order)) / (epsilon)**(1/order)))
+        # epsilon = (t**(1+1/order) * (z_counter+h*x_counter)**(1+1/order) / num_timesteps)**order
+        # print('error: ', np.real(epsilon))
+        print('number of time steps: ', num_timesteps)
 
-    dt = t/ num_timesteps
+        dt = t/ num_timesteps
 
-    trotter_step_second_order = PauliEvolutionGate(hamiltonian, dt, synthesis=fourth_order_formula)
+        trotter_step = PauliEvolutionGate(hamiltonian, dt, synthesis=fourth_order_formula)
 
-    circuit = QuantumCircuit(num_spins)
+        circuit = QuantumCircuit(num_spins)
 
-    for _ in range(num_timesteps):
-        circuit.append(trotter_step_second_order, range(num_spins))
+        for _ in range(num_timesteps):
+            circuit.append(trotter_step, range(num_spins))
+
+    elif method=='qdrift':
+        t = 0.01
+        epsilon = 0.01
+        num_timesteps = int(np.ceil( (t**(2) * (z_counter+h*x_counter)**(2)) / (epsilon)))
+        print('number of time steps: ', num_timesteps)
+        qdrift = QDrift(reps=1)
+        dt = t/ num_timesteps
+        qdrift_circ = PauliEvolutionGate(hamiltonian, dt, synthesis=qdrift)
+        circuit = QuantumCircuit(num_spins)
+        # circuit.append(qdrift_circ)
+        for _ in range(num_timesteps):
+            circuit.append(qdrift_circ, range(num_spins))
+
 
     target_basis = ['rx', 'ry', 'rz', 'h', 'cx']
     circuit = transpile(circuit,
@@ -202,3 +222,77 @@ def build_Ising_hamiltonian(num_spins, t=0.1, h=-1, Dimension=1):
                         optimization_level=1) 
 
     return circuit
+
+def gen_uccsd(width, parameters="random", seed=None, barriers=False, regname=None):
+    """
+    Generate a UCCSD ansatz with the given width (number of qubits).
+    """
+
+    uccsd = UCCSD(
+        width, parameters=parameters, seed=seed, barriers=barriers, regname=regname
+    )
+
+    circ = uccsd.gen_circuit()
+
+    return circ
+
+
+def gen_adder(
+    nbits=None, a=0, b=0, use_toffoli=False, barriers=True, measure=False, regname=None
+):
+    """
+    Generate an n-bit ripple-carry adder which performs a+b and stores the
+    result in the b register.
+
+    Based on the implementation of: https://arxiv.org/abs/quant-ph/0410184v1
+    """
+
+    adder = RCAdder(
+        nbits=nbits,
+        a=a,
+        b=b,
+        use_toffoli=use_toffoli,
+        barriers=barriers,
+        measure=measure,
+        regname=regname,
+    )
+
+    circ = adder.gen_circuit()
+
+    return circ
+
+
+def generate_circ(num_qubits, circuit_type, reg_name, connected_only, seed):
+    random.seed(seed)
+    full_circ = None
+    num_trials = 100
+    while num_trials:
+        if circuit_type == "qft":
+            full_circ = library.QFT(
+                num_qubits=num_qubits, approximation_degree=0, do_swaps=False
+            ).decompose()
+        elif circuit_type == 'uccd':
+            full_circ = gen_uccsd(num_qubits, parameters="random", seed=seed, barriers=False, regname=reg_name)
+        elif circuit_type == "aqft":
+            approximation_degree = int(math.log(num_qubits, 2) + 2)
+            full_circ = library.QFT(
+                num_qubits=num_qubits,
+                approximation_degree=num_qubits - approximation_degree,
+                do_swaps=False,
+            ).decompose()
+        elif circuit_type == "adder":
+            full_circ = gen_adder(
+                nbits=int((num_qubits - 2) / 2), barriers=False, regname=reg_name
+            )
+        else:
+            raise Exception("Illegal circuit type:", circuit_type)
+
+        if full_circ is not None and full_circ.num_tensor_factors() == 1:
+            break
+        elif full_circ is not None and not connected_only:
+            break
+        else:
+            full_circ = None
+            num_trials -= 1
+    assert full_circ is None or full_circ.num_qubits == num_qubits
+    return full_circ
