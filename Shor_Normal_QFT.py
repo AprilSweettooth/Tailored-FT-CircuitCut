@@ -100,7 +100,7 @@ def get_value_a(N):
             break
 
     """ Print the value that is used as a """
-    print('Using {0} as value for a\n'.format(a))
+    # print('Using {0} as value for a\n'.format(a))
 
     return a
 
@@ -241,7 +241,8 @@ def create_QFT(circuit,up_reg,n,with_swaps):
         j=i-1  
         while j>=0:
             if (np.pi)/(pow(2,(i-j))) > 0:
-                circuit.cu(0, 0, (np.pi)/(pow(2,(i-j))), 0, up_reg[i] , up_reg[j] )
+                # circuit.cu(0, 0, (np.pi)/(pow(2,(i-j))), 0, up_reg[i] , up_reg[j] )
+                circuit.cp((np.pi)/(pow(2,(i-j))),  up_reg[i] , up_reg[j] )
                 j=j-1   
         i=i-1  
 
@@ -274,7 +275,7 @@ def create_inverse_QFT(circuit,up_reg,n,with_swaps):
             y=i
             while y>=0:
                  if (np.pi)/(pow(2,(j-y))) > 0:
-                    circuit.cu(0, 0, - (np.pi)/(pow(2,(j-y))), 0, up_reg[j] , up_reg[y] )
+                    circuit.cp( - (np.pi)/(pow(2,(j-y))),  up_reg[j] , up_reg[y] )
                     y=y-1   
         i=i+1
 
@@ -291,11 +292,11 @@ def getAngles(a,N):
 
 """Creation of a doubly controlled phase gate"""
 def ccphase(circuit,angle,ctl1,ctl2,tgt):
-    circuit.cu(0,0,angle/2,0,ctl1,tgt)
+    circuit.cp(angle/2,ctl1,tgt)
     circuit.cx(ctl2,ctl1)
-    circuit.cu(0,0,-angle/2,0,ctl1,tgt)
+    circuit.cp(-angle/2,ctl1,tgt)
     circuit.cx(ctl2,ctl1)
-    circuit.cu(0,0,angle/2,0,ctl2,tgt)
+    circuit.cp(angle/2,ctl2,tgt)
 
 """Creation of the circuit that performs addition by a in Fourier Space"""
 """Can also be used for subtraction by setting the parameter inv to a value different from 0"""
@@ -312,9 +313,9 @@ def cphiADD(circuit,q,ctl,a,n,inv):
     angle=getAngles(a,n)
     for i in range(0,n):
         if inv==0:
-            circuit.cu(0,0,angle[i],0,ctl,q[i])
+            circuit.cp(angle[i],ctl,q[i])
         else:
-            circuit.cu(0,0,-angle[i],0,ctl,q[i])
+            circuit.cp(-angle[i],ctl,q[i])
 
 """Doubly controlled version of the phiADD circuit"""      
 def ccphiADD(circuit,q,ctl1,ctl2,a,n,inv):
@@ -366,7 +367,24 @@ def cMULTmodN(circuit, ctl, q, aux, a, N, n):
     create_inverse_QFT(circuit, aux, n+1, 0)
 
     for i in range(0, n):
-        circuit.cswap(ctl,q[i],aux[i])
+        # circuit.cswap(ctl,q[i],aux[i])
+        circuit.cx(aux[i],q[i])
+        circuit.h(aux[i])
+        circuit.cx(q[i],aux[i])
+        circuit.tdg(aux[i])
+        circuit.cx(ctl,aux[i])
+        circuit.t(aux[i])
+        circuit.cx(q[i],aux[i])
+        circuit.t(q[i])
+        circuit.tdg(aux[i])
+        circuit.cx(ctl,aux[i])
+        circuit.cx(ctl,q[i])
+        circuit.t(aux[i])
+        circuit.t(ctl)
+        circuit.tdg(q[i])
+        circuit.h(aux[i])
+        circuit.cx(ctl,q[i])
+        circuit.cx(aux[i],q[i])
 
     a_inv = modinv(a, N)
     create_QFT(circuit, aux, n+1, 0)
@@ -532,7 +550,7 @@ def shor_factoring(N):
     if check_if_power(N)==True:
        exit()
 
-    print('Not an easy case, using the quantum circuit is necessary\n')
+    # print('Not an easy case, using the quantum circuit is necessary\n')
 
     """ To login to IBM Q experience the following functions should be called """
     """
@@ -545,14 +563,14 @@ def shor_factoring(N):
     a = get_value_a(N)
 
     """ If user wants to force some values, he can do that here, please make sure to update the print and that N and a are coprime"""
-    print('Forcing N=15 and a=4 because its the fastest case, please read top of source file for more info')
+    # print('Forcing N=15 and a=4 because its the fastest case, please read top of source file for more info')
     # # N=15
     # # a=4
 
     """ Get n value used in Shor's algorithm, to know how many qubits are used """
     n = math.ceil(math.log(N,2))
     
-    print('Total number of qubits used: {0}\n'.format(4*n+2))
+    # print('Total number of qubits used: {0}\n'.format(4*n+2))
 
     """ Create quantum and classical registers """
 
